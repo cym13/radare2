@@ -550,12 +550,12 @@ reloadNodes(core);
 		r_cons_printf ("Visual Ascii Art graph keybindings:\n"
 		" .    - center graph to the current node\n"
 		" hjkl - move node\n"
-		" asdw - scroll canvas\n"
+		" uipe - scroll canvas\n"
 		" tab  - select next node\n"
 		" TAB  - select previous node\n"
 		" t/f  - follow true/false edges\n"
 		" O    - toggle disasm mode\n"
-		" u    - select previous node\n"
+		" b    - select previous node\n"
 		" V    - toggle basicblock / call graphs\n"
 		" x/X  - jump to xref/ref\n"
 		" z/Z  - step / step over\n"
@@ -575,16 +575,16 @@ reloadNodes(core);
 	case 'L': N.x+=5; break;
 	// scroll
 	case '0': can->sx = can->sy = 0; break;
-	case 'w': can->sy -= 1; break;
-	case 's': can->sy += 1; break;
-	case 'a': can->sx -= 1; break;
-	case 'd': can->sx += 1; break;
-	case 'W': can->sy -= 5; break;
-	case 'S': can->sy += 5; break;
-	case 'A': can->sx -= 5; break;
-	case 'D': can->sx += 5; break;
+	case 'p': can->sy -= 1; break;
+	case 'i': can->sy += 1; break;
+	case 'u': can->sx -= 1; break;
+	case 'e': can->sx += 1; break;
+	case 'P': can->sy -= 5; break;
+	case 'I': can->sy += 5; break;
+	case 'U': can->sx -= 5; break;
+	case 'E': can->sx += 5; break;
 		break;
-	case 'u':
+	case 'b':
 		curnode = OS_POP(); // wtf double push ?
 		updateSeek (can, &N, w, h, 0);
 		break;
