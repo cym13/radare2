@@ -474,11 +474,12 @@ static void r_print_format_word(const RPrint* p, int endian, int mustset,
 }
 
 // XXX: this is very incomplete. must be updated to handle all format chars
-static int computeStructSize(char *format, RPrint *p) {
-	char *end = strchr(format, ' '), *args, *fmt=format;
+int r_print_format_struct_size(const char *fmt, RPrint *p) {
+	char *end = strchr (fmt, ' '), *args;
 	int size = 0, tabsize=0, i, idx=0;
-	if (!end)
+	if (!end) {
 		return -1;
+	}
 	*end = 0;
 	args = strdup (end+1);
 	r_str_word_set0 (args);
@@ -499,6 +500,7 @@ static int computeStructSize(char *format, RPrint *p) {
 
 		switch (fmt[i]) {
 			case 'c':
+			case 'b':
 			case '.':
 				size+=tabsize*1;
 				break;
@@ -506,16 +508,22 @@ static int computeStructSize(char *format, RPrint *p) {
 				size += tabsize*2;
 				break;
 			case 'd':
+			case 'o':
 			case 'i':
 			case 'x':
 			case 'f':
 			case 's':
+			case 't':
 			case ':':
 				size += tabsize*4;
 				break;
 			case 'S':
 			case 'q':
 				size += tabsize*8;
+				break;
+			case 'z':
+			case 'Z':
+				size += tabsize;
 				break;
 			case '*':
 				size += tabsize*4;
@@ -532,7 +540,8 @@ static int computeStructSize(char *format, RPrint *p) {
 				break;
 			case '?':
 				{
-				char *endname = NULL, *format = NULL, *structname = NULL;
+				const char *format = NULL;
+				char *endname = NULL, *structname = NULL;
 				structname = strdup(r_str_word_get0 (args, idx));
 				if (*structname == '(') {
 					endname = strchr (structname, ')');
@@ -541,9 +550,9 @@ static int computeStructSize(char *format, RPrint *p) {
 					free(structname);
 					break;
 				}
-				if (endname!=NULL) *endname = '\0';
-				format = strdup(r_strht_get (p->formats, structname+1));
-				size += tabsize*computeStructSize (format, p);
+				if (endname) *endname = '\0';
+				format = r_strht_get (p->formats, structname+1);
+				size += tabsize * r_print_format_struct_size (format, p);
 				free (structname);
 				break;
 				}
@@ -554,7 +563,6 @@ static int computeStructSize(char *format, RPrint *p) {
 		idx++;
 	}
 	free (args);
-	free (format);
 	return size;
 }
 
@@ -573,7 +581,7 @@ static int r_print_format_struct(RPrint* p, ut64 seek, const ut8* b, int len, ch
 		return 0;
 	}
 	r_print_format (p, seek, b, len, fmt, flag, NULL);
-	return computeStructSize(strdup(fmt), p);
+	return r_print_format_struct_size(fmt, p);
 }
 
 R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
@@ -621,7 +629,7 @@ R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
 		arg = end + 1;
 	}
 
-	if (*arg=='\0' || *arg=='?') {
+	if (*arg=='\0') {
 		goto beach;
 	}
 
@@ -1054,9 +1062,13 @@ R_API int r_print_format(RPrint *p, ut64 seek, const ut8* b, const int len,
 				structname++;
 				if (name) *(name++) = '\0';
 				else eprintf ("No ')'\n");
-				if (!json)
+				if (!json) {
 					p->printf ("struct<%s>\n", structname);
-				else {
+					if (isptr) {
+						p->printf (namefmt, "----");
+						p->printf ("\n");
+					}
+				} else {
 					if (isptr)
 						p->printf ("%d},", seeki);
 					else

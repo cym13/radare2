@@ -144,7 +144,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 				free (bptr);
 				return ret;
 			}
-			free(bptr);
+			free (bptr);
 			break;
 		case 'c': return r_cons_get_size (NULL);
 		case 'r': { int rows; r_cons_get_size (&rows); return rows; }
@@ -684,6 +684,7 @@ R_API int r_core_init(RCore *core) {
 	core->print->hasrefs = (RPrintColorFor)r_core_anal_hasrefs;
 	core->rtr_n = 0;
 	core->blocksize_max = R_CORE_BLOCKSIZE_MAX;
+	core->tasks = r_list_new ();
 	core->watchers = r_list_new ();
 	core->watchers->free = (RListFree)r_core_cmpwatch_free;
 	core->scriptstack = r_list_new ();
@@ -816,6 +817,7 @@ R_API RCore *r_core_fini(RCore *c) {
 	if (!c) return NULL;
 	/* TODO: it leaks as shit */
 	//update_sdb (c);
+	r_core_task_join (c);
 	free (c->cmdqueue);
 	free (c->lastcmd);
 	r_io_free (c->io);
