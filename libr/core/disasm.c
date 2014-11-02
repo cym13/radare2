@@ -48,6 +48,8 @@ typedef struct r_disam_options_t {
 	int varsub;
 	int show_lines;
 	int linesright;
+	int tracespace;
+	int cyclespace;
 	int show_indent;
 	int show_dwarf;
 	int show_linescall;
@@ -225,6 +227,8 @@ static RDisasmState * handle_init_ds (RCore * core) {
 	ds->show_lines = r_config_get_i (core->config, "asm.lines");
 	ds->linesright = r_config_get_i (core->config, "asm.linesright");
 	ds->show_indent = r_config_get_i (core->config, "asm.indent");
+	ds->tracespace = r_config_get_i (core->config, "asm.tracespace");
+	ds->cyclespace = r_config_get_i (core->config, "asm.cyclespace");
 	ds->show_dwarf = r_config_get_i (core->config, "asm.dwarf");
 	ds->show_linescall = r_config_get_i (core->config, "asm.linescall");
 	ds->show_size = r_config_get_i (core->config, "asm.size");
@@ -963,6 +967,13 @@ static void handle_print_cycles (RCore *core, RDisasmState *ds) {
 			r_cons_printf ("%3d     ", ds->analop.cycles);
 		else	r_cons_printf ("%3d %3d ", ds->analop.cycles, ds->analop.failcycles);
 	}
+	if (ds->cyclespace) {
+		char spaces [32];
+		int times = R_MIN (ds->analop.cycles/4, 30); // limit to 30
+		memset (spaces, ' ', sizeof (spaces));
+		spaces[times] = 0;
+		r_cons_strcat (spaces);
+	}
 }
 
 static void handle_print_stackptr (RCore *core, RDisasmState *ds) {
@@ -991,9 +1002,9 @@ static void handle_print_offset (RCore *core, RDisasmState *ds) {
 				core->screen_bounds = ds->at;
 		}
 	 }
-	if (ds->show_offset)
-		r_print_offset (core->print, ds->at, (ds->at==ds->dest),
-						ds->show_offseg);
+	 if (ds->show_offset)
+		 r_print_offset (core->print, ds->at, (ds->at==ds->dest),
+				 ds->show_offseg);
 }
 
 static void handle_print_op_size (RCore *core, RDisasmState *ds) {
@@ -1002,9 +1013,22 @@ static void handle_print_op_size (RCore *core, RDisasmState *ds) {
 }
 
 static void handle_print_trace (RCore *core, RDisasmState *ds) {
+	RDebugTracepoint *tp = NULL;
 	if (ds->show_trace) {
-		RDebugTracepoint *tp = r_debug_trace_get (core->dbg, ds->at);
+		tp = r_debug_trace_get (core->dbg, ds->at);
 		r_cons_printf ("%02x:%04x ", tp?tp->times:0, tp?tp->count:0);
+	}
+	if (ds->tracespace) {
+		char spaces [32];
+		int times;
+		if (!tp)
+			tp = r_debug_trace_get (core->dbg, ds->at);
+		if (tp) {
+			times = R_MIN (tp->times, 30); // limit to 30
+			memset (spaces, ' ', sizeof (spaces));
+			spaces[times] = 0;
+			r_cons_strcat (spaces);
+		}
 	}
 }
 
@@ -1582,6 +1606,7 @@ static void handle_print_refptr (RCore *core, RDisasmState *ds) {
 R_API int r_core_print_disasm(RPrint *p, RCore *core, ut64 addr, ut8 *buf, int len, int l, int invbreak, int cbytes) {
 	int ret, idx = 0, i;
 	int continueoninvbreak = (len == l) && invbreak;
+	int dorepeat = 1;
 	RAnalFunction *f = NULL;
 	ut8 *nbuf = NULL;
 	RDisasmState *ds;
@@ -1660,8 +1685,10 @@ toro:
 	for (i=idx=ret=0; idx < len && ds->lines < ds->l;
 			idx+=ds->oplen,i++, ds->index+=ds->oplen, ds->lines++) {
 		ds->at = ds->addr + idx;
-		if (r_cons_singleton ()->breaked)
+		if (r_cons_singleton ()->breaked) {
+			dorepeat = 0;
 			break;
+		}
 
 		r_core_seek_archbits (core, ds->at); // slow but safe
 		ds->hint = r_core_hint_begin (core, ds->hint, ds->at);
@@ -1801,7 +1828,7 @@ toro:
 
 #if HASRETRY
 	//if (!ds->cbytes && idx>=len) {// && (invbreak && !ds->lastfail)) {
-	if (!ds->cbytes && ds->lines<ds->l) {
+	if (!ds->cbytes && ds->lines<ds->l && dorepeat) {
 	retry:
 		if (len<4) len = 4;
 		buf = nbuf = malloc (len);
@@ -1876,9 +1903,12 @@ R_API int r_core_print_disasm_instructions (RCore *core, int nb_bytes, int nb_op
 	if (ds->l == 0)
 		ds->l = ds->len;
 
+	r_cons_break (NULL, NULL);
 	for (i=j=0; i<bs && i<ds->len && j<ds->l; i+=ret, j++) {
 		ds->at = core->offset +i;
 		r_core_seek_archbits (core, ds->at);
+		if (r_cons_singleton ()->breaked)
+			break;
 		if (ds->hint) {
 			r_anal_hint_free (ds->hint);
 			ds->hint = NULL;
@@ -1948,6 +1978,7 @@ R_API int r_core_print_disasm_instructions (RCore *core, int nb_bytes, int nb_op
 			ds->hint = NULL;
 		}
 	}
+	r_cons_break_end ();
 	if (ds->oldbits) {
 		r_config_set_i (core->config, "asm.bits", ds->oldbits);
 		ds->oldbits = 0;

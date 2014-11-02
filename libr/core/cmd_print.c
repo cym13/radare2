@@ -179,13 +179,25 @@ static void cmd_print_format (RCore *core, const char *_input, int len) {
 		{
 		const char *val = NULL;
 		_input+=2;
-		while (*_input==' ') _input++;
-		val = r_strht_get (core->print->formats, _input);
-		if (val != NULL)
-			r_cons_printf ("%d bytes\n", r_print_format_struct_size (strdup(val), core->print));
-		else {
-			eprintf ("Struct %s not defined\nUsage: pfs struct_name\n", _input);
+		if (*_input == '.') {
+			_input++;
+			val = r_strht_get (core->print->formats, _input);
+			if (val != NULL)
+				r_cons_printf ("%d bytes\n", r_print_format_struct_size (val, core->print));
+			else {
+				eprintf ("Struct %s not defined\nUsage: pfs.struct_name | pfs format\n", _input);
+			}
+		} else if (*_input == ' ') {
+			while (*_input == ' ' && *_input != '\0') _input++;
+			if (_input != '\0')
+				r_cons_printf ("%d bytes\n", r_print_format_struct_size (_input, core->print));
+			else {
+				eprintf ("Struct %s not defined\nUsage: pfs.struct_name | pfs format\n", _input);
+			}
+		} else {
+			eprintf ("Usage: pfs.struct_name | pfs format\n");
 		}
+
 		}
 		return;
 	case '?':
@@ -760,8 +772,13 @@ static int pdi(RCore *core, int nb_opcodes, int nb_bytes, int fmt) {
 		core->anal->cur->reset_counter (core->anal, core->offset);
 	}
 
+	r_cons_break (NULL, NULL);
 	for (i=j=0; j<nb_opcodes; j++) {
 		RFlagItem *item;
+		if (r_cons_singleton ()->breaked) {
+			err = 1;
+			break;
+		}
 		r_asm_set_pc (core->assembler, core->offset+i);
 		ret = r_asm_disassemble (core->assembler, &asmop, core->block+i,
 			core->blocksize-i);
@@ -818,6 +835,7 @@ static int pdi(RCore *core, int nb_opcodes, int nb_bytes, int fmt) {
 		if (nb_bytes && (nb_bytes <= i))
 			break;
 	}
+	r_cons_break_end ();
 	core->offset = old_offset;
 	return err;
 }
@@ -1229,7 +1247,7 @@ static int cmd_print(void *data, const char *input) {
 		break;
 	case 'B': { //pB
 		if (input[1]=='?') {
-			r_cons_printf("|Usage: p[bB] [len]       bitstream of N bytes\n");
+			r_cons_printf ("|Usage: p[bB] [len]       bitstream of N bytes\n");
 		} else {
 			const int size = len*8;
 			char *buf = malloc (size+1);
@@ -1257,7 +1275,7 @@ static int cmd_print(void *data, const char *input) {
 			case 'd': // "pId" is the same as pDi
 				pdi (core, 0, l, 0);
 				break;
-			case '?':
+			case '?': // "pi?"
 				r_cons_printf("|Usage: p[iI][df] [len]   print N instructions/bytes"
 						"(f=func) (see pi? and pdi)\n");
 				break;
@@ -1364,8 +1382,11 @@ static int cmd_print(void *data, const char *input) {
 					buf = malloc (l+1);
 					r_core_read_at (core, core->offset, buf, l);
 				}
+				r_cons_break (NULL, NULL);
 				for (i=0; i<l; i++) {
 					r_asm_set_pc (core->assembler, core->offset+i);
+					if (r_cons_singleton ()->breaked)
+						break;
 					ret = r_asm_disassemble (core->assembler, &asmop,
 						buf+i, l-i);
 					if (ret<1) {
@@ -1375,6 +1396,7 @@ static int cmd_print(void *data, const char *input) {
 					} else r_cons_printf ("0x%08"PFMT64x" %16s  %s\n",
 						core->offset+i, asmop.buf_hex, asmop.buf_asm);
 				}
+				r_cons_break_end ();
 				if (buf != core->block)
 					free (buf);
 				pd_result = R_TRUE;
@@ -1486,11 +1508,14 @@ static int cmd_print(void *data, const char *input) {
 				int j, ret;
 				const ut8 *buf = core->block;
 				if (l==0) l= len;
+				r_cons_break (NULL, NULL);
 				for (i=j=0; i<core->blocksize && j<l; i+=ret,j++ ) {
 					ret = r_asm_disassemble (core->assembler, &asmop, buf+i, len-i);
+					if (r_cons_singleton ()->breaked) break;
 					printf ("%d\n", ret);
 					if (ret<1) ret = 1;
 				}
+				r_cons_break_end ();
 				pd_result = 0;
 			}
 			break;
@@ -1498,12 +1523,11 @@ static int cmd_print(void *data, const char *input) {
 			processed_cmd = R_TRUE;
 			if (*input == 'D'){
 				cmd_pDj (core, input+2);
-			} else
-				cmd_pdj (core, input+2);
-			r_cons_printf ("\n");
+			} else cmd_pdj (core, input+2);
+			r_cons_newline ();
 			pd_result = 0;
 			break;
-		case '?': //pd?
+		case '?': // "pd?"
 			processed_cmd = R_TRUE;
 			const char* help_msg[] = {
 				"Usage:", "p[dD][fil] [len] [arch] [bits] @ [addr]", " # Print Disassembly",

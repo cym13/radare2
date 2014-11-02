@@ -380,8 +380,11 @@ R_API int r_core_block_read(RCore *core, int next) {
 }
 
 R_API int r_core_read_at(RCore *core, ut64 addr, ut8 *buf, int size) {
-	if (!core->io || !core->file || !core->file->desc || size<1)
+	if (!core->io || !core->file || !core->file->desc || size<1) {
+		if (size>0)
+			memset (buf, 0xff, size);
 		return R_FALSE;
+	}
 	r_io_use_desc (core->io, core->file->desc);
 	return r_io_read_at (core->io, addr, buf, size);
 }

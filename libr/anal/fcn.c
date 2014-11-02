@@ -190,9 +190,9 @@ static RAnalBlock* appendBasicBlock (RAnalFunction *fcn, ut64 addr) {
 	r_list_append (fcn->bbs, bb);
 	return bb;
 }
-
+ //fcn->addr += n; fcn->size -= n; } else 
 #define FITFCNSZ() {st64 n=bb->addr+bb->size-fcn->addr; \
-	if (n<0) { fcn->addr += n; fcn->size = -n; } else \
+	if (n<0) { } else \
 	if (fcn->size<n)fcn->size=n; } \
 	if (fcn->size > MAX_FCN_SIZE) { \
 		eprintf ("Function too big at 0x%"PFMT64x"\n", bb->addr); \
@@ -219,6 +219,8 @@ static int fcn_recurse(RAnal *anal, RAnalFunction *fcn, ut64 addr, ut8 *buf, ut6
 		int adjust;
 		int un_idx; // delay.un_idx
 	} delay = {0};
+	if (anal->sleep)
+		r_sys_usleep (anal->sleep);
 
 	if (depth<1) {
 		return R_ANAL_RET_ERROR; // MUST BE TOO DEEP
@@ -381,8 +383,8 @@ repeat:
 			if (!r_anal_fcn_xref_add (anal, fcn, op.addr, op.jump,
 					R_ANAL_REF_TYPE_CODE)) {
 			}
-// This code seems to break #1519
-if (anal->eobjmp) {
+		// This code seems to break #1519
+		if (anal->eobjmp) {
 #if JMP_IS_EOB
 			if (!overlapped) {
 				bb->jump = op.jump;

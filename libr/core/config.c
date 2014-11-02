@@ -72,6 +72,14 @@ static int cb_analeobjmp(void *user, void *data) {
 	core->anal->eobjmp = node->i_value;
 	return R_TRUE;
 }
+
+static int cb_analsleep(void *user, void *data) {
+	RCore *core = (RCore*) user;
+	RConfigNode *node = (RConfigNode*) data;
+	core->anal->sleep = node->i_value;
+	return R_TRUE;
+}
+
 static int cb_analnopskip (void *user, void *data) {
 	RCore *core = (RCore*) user;
 	RConfigNode *node = (RConfigNode*) data;
@@ -794,6 +802,7 @@ R_API int r_core_config_init(RCore *core) {
 	/* anal */
 	SETCB("anal.eobjmp", "true", &cb_analeobjmp, "jmp is end of block mode (option)");
 	SETI("anal.depth", 16, "Max depth at code analysis"); // XXX: warn if depth is > 50 .. can be problematic
+	SETICB("anal.sleep", 0, &cb_analsleep, "Sleep some usecs before analyzing more. Avoid 100% cpu usage");
 	SETPREF("anal.hasnext", "true", "Continue analysis after each function");
 	SETPREF("anal.esil", "false", "Use the new ESIL code analysis");
 	SETCB("anal.nopskip", "false", &cb_analnopskip, "Skip nops at the begining of functions");
@@ -832,9 +841,11 @@ R_API int r_core_config_init(RCore *core) {
 	SETPREF("asm.pseudo", "false", "Enable pseudo syntax"); // DEPRECATED ?
 	SETPREF("asm.size", "false", "Show size of opcodes in disassembly (pd)");
 	SETPREF("asm.stackptr", "false", "Show stack pointer at disassembly");
+	SETPREF("asm.cyclespace", "false", "Indent instructions depending on cpu-cycles");
 	SETPREF("asm.cycles", "false", "Show cpu-cycles taken by instruction at disassembly");
 	SETI("asm.tabs", 0, "Use tabs in disassembly");
 	SETPREF("asm.trace", "false", "Show execution traces for each opcode");
+	SETPREF("asm.tracespace", "false", "Indent disassembly with trace.count information");
 	SETPREF("asm.ucase", "false", "Use uppercase syntax at disassembly");
 	SETPREF("asm.varsub", "true", "Substitute variables in disassembly");
 	SETCB("asm.arch", R_SYS_ARCH, &cb_asmarch, "Set the arch to be usedd by asm");
