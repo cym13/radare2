@@ -632,7 +632,7 @@ R_API void r_core_visual_mounts (RCore *core) {
 
 		/* Show */
 		if (mode == 0) {
-			r_cons_printf ("Partitions:\n\n");
+			r_cons_printf ("Press '/' to navigate the root filesystem.\nPartitions:\n\n");
 			n = r_fs_partition_type_get (partition);
 			list = r_fs_partitions (core->fs, n, 0);
 			i = 0;
@@ -702,6 +702,11 @@ R_API void r_core_visual_mounts (RCore *core) {
 		if (ch==-1||ch==4) return;
 		ch = r_cons_arrow_to_hjkl (ch);
 		switch (ch) {
+			case '/':
+				root = strdup ("/");
+				strncpy (path, root, sizeof (path)-1);
+				mode = 2;
+				break;
 			case 'l':
 			case '\r':
 			case '\n':
@@ -748,7 +753,7 @@ R_API void r_core_visual_mounts (RCore *core) {
 						if (file->type == 'd') {
 							strncat (path, file->name, sizeof (path)-strlen (path)-1);
 							r_str_chop_path (path);
-							if (memcmp (root, path, strlen (root)-1))
+							if (!root || memcmp (root, path, strlen (root)-1))
 								strncpy (path, root, sizeof (path)-1);
 						} else {
 							r_core_cmdf (core, "s 0x%"PFMT64x, file->off);

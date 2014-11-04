@@ -305,6 +305,8 @@ R_API int r_asm_set_pc(RAsm *a, ut64 pc) {
 R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	int oplen, ret = op->payload = 0;
 	op->size = 4;
+	if (len<1)
+		return 0;
 	if (a->cur && a->cur->disassemble)
 		ret = a->cur->disassemble (a, op, buf, len);
 	oplen = r_asm_op_get_size (op);
@@ -318,6 +320,8 @@ R_API int r_asm_disassemble(RAsm *a, RAsmOp *op, const ut8 *buf, int len) {
 	} else ret = 0;
 	r_mem_copyendian (op->buf, buf, oplen, !a->big_endian);
 	*op->buf_hex = 0;
+	if ((oplen*4)>=sizeof(op->buf_hex))
+		oplen = (sizeof(op->buf_hex)/4)-1;
 	r_hex_bin2str (buf, oplen, op->buf_hex);
 	return ret;
 }
@@ -376,7 +380,8 @@ R_API RAsmCode* r_asm_mdisassemble(RAsm *a, const ut8 *buf, int len) {
 		ret = r_asm_disassemble (a, &op, buf+idx, len-idx);
 		if (ret<1) {
 			eprintf ("disassemble error at offset %"PFMT64d"\n", idx);
-			return acode;
+ret = 1;
+//			return acode;
 		}
 		if (a->ofilter)
 			r_parse_parse (a->ofilter, op.buf_asm, op.buf_asm);

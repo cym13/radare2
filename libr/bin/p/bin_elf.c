@@ -402,6 +402,8 @@ static RBinReloc *reloc_convert(struct Elf_(r_bin_elf_obj_t) *bin, RBinElfReloc 
 	case EM_X86_64: switch (rel->type) {
 		case R_X86_64_NONE:	break; // malloc then free. meh. then again, there's no real world use for _NONE.
 		case R_X86_64_64:	ADD(64, 0);
+		case R_X86_64_PLT32:	ADD(32,-P /* +L */);
+		case R_X86_64_GOT32:	ADD(32, GOT);
 		case R_X86_64_PC32:	ADD(32,-P);
 		case R_X86_64_GLOB_DAT:	SET(64);
 		case R_X86_64_JUMP_SLOT:SET(64);
@@ -412,6 +414,8 @@ static RBinReloc *reloc_convert(struct Elf_(r_bin_elf_obj_t) *bin, RBinElfReloc 
 		case R_X86_64_PC16:	ADD(16,-P);
 		case R_X86_64_8:	ADD(8,  0);
 		case R_X86_64_PC8:	ADD(8, -P);
+		case R_X86_64_GOTPCREL:	ADD(64, GOT-P);
+		case R_X86_64_COPY:	ADD(64, 0); // XXX: copy symbol at runtime
 		default: eprintf("TODO(eddyb): uninmplemented ELF/x64 reloc type %i\n", rel->type);
 		}
 		break;
@@ -458,18 +462,18 @@ static RList* relocs(RBinFile *arch) {
 	r_list_free (imports (arch));
 
 #if 1
-	if ((got_addr = Elf_ (r_bin_elf_get_section_addr) (arch->o->bin_obj, ".got")) == -1 &&
-		(got_addr = Elf_ (r_bin_elf_get_section_addr) (arch->o->bin_obj, ".got.plt")) == -1) 
-	{
-		return ret;
+	if ((got_addr = Elf_ (r_bin_elf_get_section_addr) (arch->o->bin_obj, ".got")) == -1) {
+		got_addr = Elf_ (r_bin_elf_get_section_addr) (arch->o->bin_obj, ".got.plt");
+		got_addr = 0;
 	}
+
 	if (arch->o) {
 		if (!(relocs = Elf_(r_bin_elf_get_relocs) (arch->o->bin_obj)))
 			return ret;
 		for (i = 0; !relocs[i].last; i++) {
 			if (!(ptr = reloc_convert (arch->o->bin_obj,
 					&relocs[i], got_addr)))
-				break;
+				continue;
 			r_list_append (ret, ptr);
 		}
 		free (relocs);

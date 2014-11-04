@@ -65,6 +65,7 @@ typedef struct r_io_desc_t {
 	int flags;
 	int state;
 	char *uri;
+	char *referer;
 	char *name;
 	void *data;
 	struct r_io_plugin_t *plugin;
@@ -117,6 +118,7 @@ typedef struct r_io_t {
 	int raised;
 	int va;
 	int raw;
+	char *referer;
 	char *redirect;
 	/* write mask */
 	void (*printf)(const char *str, ...);

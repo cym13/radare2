@@ -7,21 +7,25 @@
 static int r_core_bin_set_cur (RCore *core, RBinFile *binfile);
 
 static ut64 rva (RBin *bin, int va, ut64 paddr, ut64 vaddr, ut64 baddr, ut64 laddr) {
-	if (bin && bin->cur && bin->cur->o && bin->cur->o->info) {
-		if (bin->cur->o->info->type[0] != 'E') {
-			// if its not an executable, use va = 2 mode to load the syms
-			// hackaround to make -1 be va=0 and 0 to be no-laddr
-			if (baddr == 0) {
-				// its an object, so load it at base 0
-				va = 2;
-			}
+	int has_info = 0;
+	if (bin && bin->cur && bin->cur->o && bin->cur->o->info)
+		has_info = 1;
+	if (has_info && bin->cur->o->info->type[0] != 'E') {
+		// if its not an executable, use va = 2 mode to load the syms
+		// hackaround to make -1 be va=0 and 0 to be no-laddr
+		if (baddr == 0) {
+			// its an object, so load it at base 0
+			va = 2;
 		}
 	}
 	if (laddr == UT64_MAX)
 		va = 0;
-	if (va == 2) {
-		if (!baddr) baddr=1;
-		// hackaround for PIE bins
+	if (has_info && bin->cur->o->info->bits != 16) {
+		// hackaround the hackaround for bios
+		if (va == 2) {
+			if (!baddr) baddr = 1;
+			// hackaround for PIE bins
+		}
 	}
 	switch (va) {
 	case 0: // pa $ rabin2 -p
@@ -488,7 +492,6 @@ static int bin_pdb (RCore *core, int mode) {
 static int bin_main (RCore *r, int mode, ut64 baddr, int va) {
 	RBinAddr *binmain = r_bin_get_sym (r->bin, R_BIN_SYM_MAIN);
 	if (!binmain) return R_FALSE;
-
 	baddr = 0LL; // This is broken, just to make t.formats/elf/main happy
 	if ((mode & R_CORE_BIN_SIMPLE) || mode & R_CORE_BIN_JSON) {
 		r_cons_printf ("%"PFMT64d, va? (baddr+binmain->vaddr):binmain->paddr);
@@ -600,6 +603,8 @@ static int bin_relocs (RCore *r, int mode, ut64 baddr, int va) {
 	RBinReloc *reloc;
 	int i = 0;
 
+	va = 1; // XXX relocs always vaddr?
+
 	if ((relocs = r_bin_get_relocs (r->bin)) == NULL)
 		return R_FALSE;
 
@@ -628,7 +633,7 @@ static int bin_relocs (RCore *r, int mode, ut64 baddr, int va) {
 			demname = NULL;
 			if (reloc->import && reloc->import->name[0]) {
 				snprintf (str, R_FLAG_NAME_SIZE,
-					"reloc.%s", reloc->import->name);
+					"reloc.%s_%d", reloc->import->name, (int)(addr&0xff));
 				if (r_config_get_i (r->config, "bin.demangle"))
 					demname = r_bin_demangle (r->bin->cur, str); //reloc->import->name);
 				r_name_filter (str, 0);
@@ -657,7 +662,7 @@ static int bin_relocs (RCore *r, int mode, ut64 baddr, int va) {
 				if (reloc->import) {
 					char *str = strdup (reloc->import->name);
 					r_str_replace_char (str, '$', '_');
-					r_cons_printf ("f reloc.%s @ 0x%08"PFMT64x"\n", str, addr);
+					r_cons_printf ("f reloc.%s_%d @ 0x%08"PFMT64x"\n", str, (int)(addr&0xff), addr);
 					free (str);
 				} else {
 					// TODO(eddyb) implement constant relocs.
@@ -668,7 +673,6 @@ static int bin_relocs (RCore *r, int mode, ut64 baddr, int va) {
 			r_cons_printf ("[Relocations]\n");
 			r_list_foreach (relocs, iter, reloc) {
 				ut64 addr = va? reloc->vaddr: reloc->paddr;
-addr = reloc->vaddr;
 				r_cons_printf ("vaddr=0x%08"PFMT64x" paddr=0x%08"PFMT64x" type=%s",
 					addr, reloc->paddr, bin_reloc_type_name (reloc));
 				if (reloc->import && reloc->import->name[0])

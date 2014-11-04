@@ -87,6 +87,8 @@ R_API int r_hex_pair2bin(const char *arg) {
 R_API int r_hex_bin2str(const ut8 *in, int len, char *out) {
 	int i, idx;
 	char tmp[5];
+	if (len<0)
+		return 0;
 	for (idx=i=0; i<len; i++,idx+=2)  {
 		snprintf (tmp, sizeof (tmp), "%02x", in[i]);
 		memcpy (out+idx, tmp, 2);
@@ -110,11 +112,16 @@ R_API int r_hex_str2bin(const char *in, ut8 *out) {
 	int len = 0, j = 0;
 	const char *ptr;
 	ut8 c = 0, d = 0;
+	int outbuf = 0;
 
 	if (!in || !*in)
 		return 0;
 	if (!memcmp (in, "0x", 2))
 		in += 2;
+	if (!out) {
+		outbuf = 1;
+		out = malloc (strlen (in));
+	}
 	for (ptr = in; ; ptr++) {
 		/* comments */
 		if (*ptr=='#') {
@@ -174,15 +181,19 @@ R_API int r_hex_str2bin(const char *in, ut8 *out) {
 		}
 		if (r_hex_to_byte (&c, ptr[0])) {
 			//eprintf("binstr: Invalid hexa string at %d ('0x%02x') (%s).\n", (int)(ptr-in), ptr[0], in);
-			return len;
+			goto beach;
 		}
 		c |= d;
 		if (j++ == 0) c <<= 4;
 	}
 	// has nibbles. requires a mask
+beach:
 	if (j) {
 		out[len] = c;
 		len = -len;
+	}
+	if (outbuf) {
+		free (out);
 	}
 	return (int)len;
 }

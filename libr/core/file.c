@@ -20,20 +20,29 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 	RBinFile *bf = (ofile && ofile->desc) ?
 		r_bin_file_find_by_fd (core->bin, ofile->desc->fd) : NULL;
 	RIODesc *odesc = ofile ? ofile->desc : NULL;
-	char *ofilepath = odesc ? strdup (odesc->uri) : NULL;
-	char *obinfilepath = bf ? strdup (bf->file) : NULL;
+	char *ofilepath, *obinfilepath = bf ? strdup (bf->file) : NULL;
 	int newpid, ret = R_FALSE;
 	ut64 origoff = core->offset;
+	if (odesc) {
+		if (odesc->referer) {
+			ofilepath = odesc->referer;
+		} else if (odesc->uri) {
+			ofilepath = odesc->uri;
+		}
+	}
+
 	if (r_sandbox_enable (0)) {
 		eprintf ("Cannot reopen in sandbox\n");
 		return R_FALSE;
 	}
+#if 0
 	if (isdebug) {
 		// if its in debugger mode we have to respawn a new process
 		// instead of reattaching
 		free (ofilepath);
 		ofilepath = r_str_newf ("dbg://%s", odesc->name);
 	}
+#endif
 	if (!core->file) {
 		eprintf ("No file opened to reopen\n");
 		free (ofilepath);
@@ -51,9 +60,7 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 			perm = 4; //R_IO_READ;
 		}
 	}
-	if (ofilepath) {
-		path = strdup (ofilepath);
-	} else {
+	if (!ofilepath) {
 		eprintf ("Unknown file path");
 		return R_FALSE;
 	}
@@ -66,6 +73,9 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 	}
 	// closing the file to make sure there are no collisions
 	// when the new memory maps are created.
+	path = strdup (ofilepath);
+	obinfilepath = strdup(ofilepath);
+
 	file = r_core_file_open (core, path, perm, baddr);
 	if (file) {
 		int had_rbin_info = 0;
@@ -135,7 +145,7 @@ R_API int r_core_file_reopen(RCore *core, const char *args, int perm, int loadbi
 	// This is done to ensure that the file is correctly
 	// loaded into the view
 	free (obinfilepath);
-	free (ofilepath);
+	//free (ofilepath);
 	free (path);
 	return ret;
 }
@@ -566,7 +576,7 @@ R_API RCoreFile *r_core_file_open_many(RCore *r, const char *file, int flags, ut
 		fh->map = r_core_file_get_next_map (r, fh, flags, current_loadaddr);
 
 		if (!fh->map) {
-			r_core_file_free(fh);
+			r_core_file_free (fh);
 			if (!strcmp (suppress_warning, "false"))
 				eprintf("Unable to load file due to failed mapping.\n");
 			continue;
@@ -667,15 +677,21 @@ R_API int r_core_files_free (const RCore *core, RCoreFile *cf) {
 
 R_API void r_core_file_free(RCoreFile *cf) {
 	int res = 1;
-	if (cf)
+	if (!cf || !cf->core)
+		return;
+	if (cf) {
 		res = r_core_files_free (cf->core, cf);
-	if (!res && cf->alive) {
+	}
+	//if (!res && cf && cf->alive) {
+	if (res && cf && cf->alive) {
 		// double free libr/io/io.c:70 performs free
-		RIO *io = (RIO*)(cf->desc ? cf->desc->io : NULL);
-
-		if (io && cf->map) r_io_map_del_all (io, cf->map->fd);
-		if (io) r_io_close ((RIO *) io, cf->desc);
-
+		RIO *io = NULL;
+		if (cf) {
+			io = (RIO*)(cf->desc ? cf->desc->io : NULL);
+			return;
+			if (cf->map) r_io_map_del_all (io, cf->map->fd);
+			r_io_close ((RIO *) io, cf->desc);
+		}
 		r_bin_file_deref_by_bind (&cf->binb);
 		free (cf);
 	}
@@ -683,6 +699,7 @@ R_API void r_core_file_free(RCoreFile *cf) {
 }
 
 R_API int r_core_file_close(RCore *r, RCoreFile *fh) {
+	int ret;
 	RIODesc *desc = fh && fh->desc? fh->desc : NULL;
 	RCoreFile *prev_cf = r && r->file != fh ? r->file : NULL;
 
@@ -707,7 +724,10 @@ R_API int r_core_file_close(RCore *r, RCoreFile *fh) {
 	/* delete filedescriptor from io descs here */
 	r_io_desc_del (r->io, fh->desc->fd);
 
-	int ret = r_list_delete_data (r->files, fh);
+	// AVOID DOUBLE FREE HERE
+	r->files->free = NULL;
+
+	ret = r_list_delete_data (r->files, fh);
 	if (ret) {
 		if (!prev_cf && r_list_length (r->files) > 0)
 			prev_cf = (RCoreFile *) r_list_get_n (r->files, 0);
